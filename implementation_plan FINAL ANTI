@@ -1,0 +1,109 @@
+# HireFlow AI — Full-Stack Implementation Plan (Revised: College Placement MVP)
+
+> **Stack decisions locked (confirmed by user):** MERN + TypeScript · Email/password JWT auth (single token, 24h) · Google Gemini AI · MongoDB · Puppeteer PDF · In-process queue (p-limit) · React + Vite + shadcn/ui · Render + Vercel + Atlas · #F3F4F6 background · Typed-name e-signature · Full PRD Must-Have MVP
+
+---
+
+## Overview
+
+**HireFlow AI** is an India-first, AI-powered ATS + HR document platform for 10–300 employee companies. The first commercial build covers the entire must-have MVP loop:
+
+```
+Org Setup → Jobs → Candidate Applications → Resume Parsing (Gemini) →
+Candidate Fit Score → Hiring Pipeline → Interviews → Offer Letters →
+Approval Workflow → Candidate Offer Portal → Acceptance
+```
+
+Two surfaces: **(1) Marketing Landing Page** and **(2) Product App (dashboard + all modules)**. Both share the same exact brand tokens.
+
+---
+
+## Confirmed Decisions
+
+| Decision | Choice |
+|---|---|
+| Backend | Node.js + Express 5 + TypeScript |
+| Frontend | React + Vite + TypeScript + Tailwind CSS + shadcn/ui |
+| Database | MongoDB (Mongoose) |
+| Auth | Email/password only · Single JWT (`JWT_SECRET`, 24h expiry) |
+| AI Provider | Google Gemini API (`@google/genai`) |
+| PDF Generation | Puppeteer (server-side HTML → PDF) |
+| Queue | In-process async + `p-limit` |
+| File Storage | Cloudinary (logos, avatars, photos) + Cloudinary `raw` (resume files) |
+| E-Signature | Typed full name + timestamp + IP record |
+| Deployment | Render (backend) + Vercel (frontend) + MongoDB Atlas |
+| Background | `#F3F4F6` (light neutral gray) |
+| Real-time | **None** — notifications use polling (`GET /notifications` every ~30s) |
+| Error logging | `console.error` in dev; Sentry DSN is **optional** |
+
+---
+
+## Frontend Remaining Tasks (Phase 1 – Auth UI & Routing)
+
+### Goal
+Complete the frontend authentication flow and replace the placeholder `App.tsx` with a proper React Router‑based application shell that integrates the existing `AuthProvider`, `RequireAuth`, and `RequireRole` components.
+
+### Proposed Changes
+
+1. **Replace `frontend/src/App.tsx`**
+   - Set up `BrowserRouter` from `react-router-dom`.
+   - Define a route hierarchy matching the master plan:
+     - Public routes: `/login`, `/register`, `/invite/accept/:token`.
+     - Protected routes (wrapped in `<RequireAuth>`): all `/app/*` pages.
+   - Use the existing `AppShell` component (`components/shared/AppShell.tsx`) as the layout for protected routes.
+   - Provide a fallback `<FullPageSpinner />` while auth status is loading.
+   - Rely on the Axios interceptor in `client.ts` for 401 handling.
+
+2. **Optional `src/routes.tsx`**
+   - Export an array of route objects to keep `App.tsx` tidy.
+   - Each route includes `path`, `element`, and a `protected` flag.
+
+3. **Verify UI components in `components/ui`**
+   - Ensure shadcn/ui primitives (`button`, `input`, `label`, `card`, etc.) are present.
+   - If missing, the user should run:
+     ```bash
+     npx shadcn-ui@latest add button input label card
+     ```
+   - (Agent cannot execute this directly; can suggest via response.)
+
+4. **Update `LoginPage.tsx`**
+   - Confirm import paths for UI components (`../../components/ui/button` etc.).
+   - Keep design token classes (`bg-primary`, `text-ink`, `rounded-pill`).
+   - Ensure navigation after login redirects to `/app/dashboard`.
+
+5. **AuthProvider bootstrap**
+   - Already fetches `/users/me` if a token exists.
+   - `RequireAuth` should display `<FullPageSpinner />` while `isLoading`.
+
+6. **Tailwind design tokens**
+   - Verify `index.css` includes `@apply` rules for `bg-slate`, `text-ink`, etc., matching `tailwind.config.ts`.
+
+7. **Manual dev verification**
+   - Run `npm run dev`, open `http://localhost:5173/login`, log in with a test user, confirm redirect to `/app/dashboard`.
+   - Test protected route access redirects to `/login` when unauthenticated.
+
+---
+
+## Open Questions (User Review Required)
+
+> [!IMPORTANT]
+> **Initial Public Landing Page** – Should the app include a simple marketing landing page at `/` that redirects to `/login` if the user is not authenticated, or start directly at `/login` with no public landing page?
+>
+> **Answer Options:**
+> - (Recommended) Include a landing page at `/` that redirects to `/login` when unauthenticated.
+> - Start directly at `/login` with no public landing page.
+
+---
+
+## Verification Plan
+
+- **Automated Tests**: Run any existing frontend tests with `npm test`.
+- **Manual Testing**:
+  1. Start the dev server (`npm run dev`).
+  2. Access `/login`, perform a login, verify navigation to `/app/dashboard`.
+  3. Attempt to access a protected route (`/app/jobs`) while logged out; ensure redirect to `/login`.
+  4. Confirm UI follows the design tokens (primary colors, rounded buttons, typography).
+
+---
+
+*Please review the proposed changes and answer the open question about the initial public landing page. Once approved, I will implement the updated `App.tsx`, ensure UI components exist, and perform verification.*
