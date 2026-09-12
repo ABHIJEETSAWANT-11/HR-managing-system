@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { Candidate } from "./candidate.model";
-import { Resume } from "./resume.model";
-import { CandidateApplication } from "./application.model";
-import { requireAuth, requireTenant } from "../../middleware/requireAuth";
+import { Resume } from "../resumes/resume.model";
+import { CandidateApplication } from "../applications/application.model";
+import { requireAuth, requireTenant } from "../../middleware/tenantGuard";
 import pLimit from "p-limit";
 
 function extractText(fileBuffer: Buffer, fileType: string): string {

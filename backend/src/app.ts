@@ -29,6 +29,7 @@ import jobRoutes, { publicJobRouter } from "./modules/jobs/job.routes";
 import candidateRoutes from "./modules/candidates/candidate.routes";
 import resumeRoutes from "./modules/resumes/resume.routes";
 import applicationRoutes from "./modules/applications/application.routes";
+import interviewRoutes from "./modules/interviews/interview.routes";
 
 // 5. Global Rate Limiter
 const globalLimiter = rateLimit({

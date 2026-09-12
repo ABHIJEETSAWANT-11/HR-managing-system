@@ -1,8 +1,23 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { Resume } from "../modules/resumes/resume.model";
-import { Candidate } from "../modules/candidates/candidate.model";
-import { requireAuth, requireTenant } from "../../middleware/requireAuth";
+import { Resume } from "./resume.model";
+import { Candidate } from "../candidates/candidate.model";
+import { requireAuth } from "../../middleware/requireAuth";
+import { requireTenant } from "../../middleware/tenantGuard";
 import pLimit from "p-limit";
+import mongoose from "mongoose";
+import multer from "multer";
+
+interface FileStorage {
+  destination: string;
+  filename: string;
+  path: string;
+  buffer: Buffer;
+}
+
+interface MulterRequest extends Request {
+  file?: FileStorage;
+  files?: FileStorage[];
+}
 
 function extractText(fileBuffer: Buffer, fileType: string): string {
   if (fileType === "pdf") {
@@ -223,10 +238,7 @@ router.patch(
         $set: { parsedData: req.body.parsedData, parsingStatus: "completed" },
       });
 
-      res.status(200).json({
-        success: true,
-        data: { resume },
-      });
+      res.status(200).json({ success: true, data: { resume } });
     } catch (error) {
       next(error);
     }

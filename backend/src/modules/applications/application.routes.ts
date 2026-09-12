@@ -1,8 +1,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { CandidateApplication } from "./application.model";
-import { Job } from "./job.model";
+import { Job } from "../jobs/job.model";
 import { Candidate } from "../candidates/candidate.model";
-import { requireAuth, requireTenant } from "../../middleware/requireAuth";
+import { requireAuth, requireTenant } from "../../middleware/tenantGuard";
 
 const router = Router();
 

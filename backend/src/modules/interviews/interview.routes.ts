@@ -2,8 +2,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Interview } from "./interview.model";
 import { InterviewScorecard } from "./interview-scorecard.model";
 import { requireAuth } from "../../middleware/requireAuth";
-import { CandidateApplication } from "../modules/applications/application.model";
-import { Job } from "../modules/jobs/job.model";
+import { CandidateApplication } from "../applications/application.model";
+import { Job } from "../jobs/job.model";
 import mongoose from "mongoose";
 
 function isInterviewer(interview: any, userId: mongoose.Types.ObjectId): boolean {
@@ -25,18 +25,23 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
-      const { applicationId, candidateId, jobId, interviewerId, status, startDate, endDate } = req.query as Record<string, string>;
+      const {
+        applicationId, candidateId, jobId, interviewerId,
+        status, startDate, endDate
+      } = req.query as Record<string, string>;
 
       const filter: Record<string, unknown> = { organizationId: orgId };
 
       if (applicationId) filter.applicationId = applicationId;
       if (candidateId) filter.candidateId = candidateId;
       if (jobId) filter.jobId = jobId;
+      if (interviewerId) filter.interviewerIds = interviewerId;
       if (status) filter.status = status;
+
       if (startDate || endDate) {
-        filter.scheduledAt = {};
-        if (startDate) filter.scheduledAt.$gte = new Date(startDate as string);
-        if (endDate) filter.scheduledAt.$lte = new Date(endDate as string);
+        filter.scheduledAt = {} as any;
+        if (startDate) (filter.scheduledAt as any).$gte = new Date(startDate as string);
+        if (endDate) (filter.scheduledAt as any).$lte = new Date(endDate as string);
       }
 
       let interviews;
@@ -69,7 +74,10 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
-      const { applicationId, candidateId, jobId, type, interviewerIds, scheduledAt, durationMinutes, meetingLink, location, instructions } = req.body;
+      const {
+        applicationId, candidateId, jobId, type, interviewerIds,
+        scheduledAt, durationMinutes, meetingLink, location, instructions
+      } = req.body;
 
       const application = await CandidateApplication.findOne({
         _id: applicationId,
@@ -105,10 +113,7 @@ router.post(
 
       await interview.save();
 
-      res.status(201).json({
-        success: true,
-        data: { interview },
-      });
+      res.status(201).json({ success: true, data: { interview } });
     } catch (error) {
       next(error);
     }
@@ -126,7 +131,7 @@ router.get(
         _id: req.params.id,
         organizationId: orgId,
       })
-        .populate("candidateId", "fullName email currentDesignation")
+        .populate("candidateId", "fullName email")
         .populate("jobId", "title departmentId employmentType")
         .populate("interviewerIds", "name email");
 
@@ -205,10 +210,7 @@ router.delete(
       }
       await interview.save();
 
-      res.status(200).json({
-        success: true,
-        data: { message: "Interview cancelled successfully", interview },
-      });
+      res.status(200).json({ success: true, data: { message: "Interview cancelled successfully", interview } });
     } catch (error) {
       next(error);
     }
@@ -260,10 +262,7 @@ router.post(
 
       await scorecard.save();
 
-      res.status(201).json({
-        success: true,
-        data: { scorecard },
-      });
+      res.status(201).json({ success: true, data: { scorecard } });
     } catch (error) {
       next(error);
     }
@@ -304,20 +303,14 @@ router.get(
         // Interviewer who has submitted: return all scorecards
         const scorecards = await InterviewScorecard.find({ interviewId: interview._id })
           .populate("interviewerId", "name email");
-        res.status(200).json({
-          success: true,
-          data: { scorecards },
-        });
+        return res.status(200).json({ success: true, data: { scorecards } });
       }
 
       // Reviewer: return all scorecards regardless
       if (userRole && ["hiring_manager", "org_admin", "recruiter"].includes(userRole)) {
         const scorecards = await InterviewScorecard.find({ interviewId: interview._id })
           .populate("interviewerId", "name email");
-        res.status(200).json({
-          success: true,
-          data: { scorecards },
-        });
+        return res.status(200).json({ success: true, data: { scorecards } });
       }
 
       res.status(200).json({ success: true, data: { scorecards: [] } });
@@ -343,7 +336,7 @@ router.post(
 
       // Check: only callable once ALL assigned interviewers have submitted
       const allSubmitted = interview.interviewerIds.every(
-        (id: mongoose.Types.ObjectId) => 
+        (id: mongoose.Types.ObjectId) =>
           InterviewScorecard.exists({ interviewId: interview._id, interviewerId: id, isSubmitted: true })
       );
 
@@ -367,10 +360,7 @@ router.post(
         $set: { feedbackSummary },
       }).catch(() => {});
 
-      res.status(200).json({
-        success: true,
-        data: { feedbackSummary },
-      });
+      res.status(200).json({ success: true, data: { feedbackSummary } });
     } catch (error) {
       next(error);
     }

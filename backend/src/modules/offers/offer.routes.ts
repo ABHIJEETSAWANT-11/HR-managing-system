@@ -2,11 +2,11 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Offer } from "./offer.model";
 import { OfferApproval } from "./offer-approval.model";
 import { DocumentTemplate } from "../templates/document-template.model";
-import { requireAuth, requireTenant } from "../../middleware/requireAuth";
-import { requireTenant as reqTenant } from "../../middleware/tenantGuard";
-import { CandidateApplication } from "../modules/applications/application.model";
-import { Candidate } from "../modules/candidates/candidate.model";
-import { Job } from "../modules/jobs/job.model";
+import { requireAuth } from "../../middleware/requireAuth";
+import { requireTenant } from "../../middleware/tenantGuard";
+import { CandidateApplication } from "../applications/application.model";
+import { Candidate } from "../candidates/candidate.model";
+import { Job } from "../jobs/job.model";
 import mongoose from "mongoose";
 
 /**
@@ -103,19 +103,10 @@ router.post(
     try {
       const orgId = req.org!._id;
       const {
-        applicationId,
-        jobId,
-        candidateId,
-        templateId,
-        joiningDate,
-        reportingManagerId,
-        workLocation,
-        probationPeriodDays,
-        noticePeriodDays,
-        validUntil,
-        salaryStructure,
-        specialConditions,
-        createdBy,
+        applicationId, jobId, candidateId, templateId,
+        joiningDate, reportingManagerId, workLocation,
+        probationPeriodDays, noticePeriodDays, validUntil,
+        salaryStructure, specialConditions, createdBy,
       } = req.body;
 
       // Verify application exists and belongs to org
@@ -205,10 +196,7 @@ router.post(
 
       await offer.save();
 
-      res.status(201).json({
-        success: true,
-        data: { offer },
-      });
+      res.status(201).json({ success: true, data: { offer } });
     } catch (error) {
       next(error);
     }
@@ -227,7 +215,7 @@ router.get(
         _id: req.params.id,
         organizationId: orgId,
       })
-        .populate("candidateId", "fullName email currentDesignation")
+        .populate("candidateId", "fullName email")
         .populate("jobId", "title departmentId employmentType")
         .populate("reportingManagerId", "name email");
 
@@ -381,10 +369,7 @@ router.post(
       offer.status = "awaiting_approval";
       await offer.save();
 
-      res.status(200).json({
-        success: true,
-        data: { offer, approval: newApproval },
-      });
+      res.status(200).json({ success: true, data: { offer, approval: newApproval } });
     } catch (error) {
       next(error);
     }
@@ -519,10 +504,7 @@ router.post(
       offer.sentAt = new Date();
       await offer.save();
 
-      res.status(200).json({
-        success: true,
-        data: { offer },
-      });
+      res.status(200).json({ success: true, data: { offer } });
     } catch (error) {
       next(error);
     }
@@ -564,10 +546,7 @@ router.post(
       offer.status = "withdrawn";
       await offer.save();
 
-      res.status(200).json({
-        success: true,
-        data: { offer },
-      });
+      res.status(200).json({ success: true, data: { offer } });
     } catch (error) {
       next(error);
     }
