@@ -30,6 +30,7 @@ import candidateRoutes from "./modules/candidates/candidate.routes";
 import resumeRoutes from "./modules/resumes/resume.routes";
 import applicationRoutes from "./modules/applications/application.routes";
 import interviewRoutes from "./modules/interviews/interview.routes";
+import offerRoutes from "./modules/offers/offer.routes";
 
 // 5. Global Rate Limiter
 const globalLimiter = rateLimit({
@@ -49,6 +50,7 @@ app.use("/api/v1/auth", authLimiter, authRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/jobs", jobRoutes);
 app.use("/api/v1/public/jobs", publicJobRouter);
+app.use("/api/v1/offers", offerRoutes);
 app.use("/api/v1/candidates", candidateRoutes);
 app.use("/api/v1/resumes", resumeRoutes);
 app.use("/api/v1/applications", applicationRoutes);
@@ -70,5 +72,4 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     },
   });
 });
-
 export default app;
