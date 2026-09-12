@@ -5,19 +5,6 @@ import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
 import pLimit from "p-limit";
 import mongoose from "mongoose";
-import multer from "multer";
-
-interface FileStorage {
-  destination: string;
-  filename: string;
-  path: string;
-  buffer: Buffer;
-}
-
-interface MulterRequest extends Request {
-  file?: FileStorage;
-  files?: FileStorage[];
-}
 
 function extractText(fileBuffer: Buffer, fileType: string): string {
   if (fileType === "pdf") {
@@ -41,9 +28,9 @@ router.post(
   requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const orgId = req.org!._id;
+      const orgId = (req as any).org!._id;
       const candidateId = req.body.candidateId;
-      const file = req.file;
+      const file = (req as any).file;
 
       if (!file) {
         return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "No file uploaded" } });
@@ -112,8 +99,8 @@ router.post(
   requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const orgId = req.org!._id;
-      const files = req.files;
+      const orgId = (req as any).org!._id;
+      const files = (req as any).files;
       const candidateId = req.body.candidateId;
 
       if (!files || files.length === 0) {
@@ -122,7 +109,7 @@ router.post(
 
       const limit = pLimit(3);
       const results = await Promise.all(
-        files.map((file) =>
+        files.map((file: any) =>
           limit(async () => {
             const cloudinaryPublicId = "resume_" + Date.now() + "_" + file.originalname.replace(/\s+/g, "_");
 
@@ -190,7 +177,7 @@ router.post(
     try {
       const resume = await Resume.findOne({
         _id: req.params.id,
-        organizationId: req.org!._id,
+        organizationId: (req as any).org!._id,
       });
 
       if (!resume) {
@@ -227,7 +214,7 @@ router.patch(
     try {
       const resume = await Resume.findOne({
         _id: req.params.id,
-        organizationId: req.org!._id,
+        organizationId: (req as any).org!._id,
       });
 
       if (!resume) {
@@ -253,7 +240,7 @@ router.get(
     try {
       const resume = await Resume.findOne({
         _id: req.params.id,
-        organizationId: req.org!._id,
+        organizationId: (req as any).org!._id,
       });
 
       if (!resume) {
@@ -265,7 +252,12 @@ router.get(
         data: {
           parsingStatus: resume.parsingStatus,
           parsedAt: resume.parsedAt,
-          parseProgress: resume.parsingStatus === "completed" ? 100 : resume.parsingStatus === "processing" ? 50 : 0,
+          parseProgress:
+            resume.parsingStatus === "completed"
+              ? 100
+              : resume.parsingStatus === "processing"
+              ? 50
+              : 0,
         },
       });
     } catch (error) {

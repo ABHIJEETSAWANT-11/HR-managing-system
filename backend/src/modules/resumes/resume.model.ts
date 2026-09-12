@@ -11,6 +11,7 @@ export interface IResume extends Document {
   parsedData?: any;
   parsingConfidence?: number;
   resumeQualityScore?: number;
+  parsedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
