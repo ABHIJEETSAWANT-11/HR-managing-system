@@ -253,12 +253,25 @@ export async function renderOfferPdf(offerId: string): Promise<Buffer> {
 
 /**
  * Generate the offer PDF, upload to Cloudinary (raw), and persist pdfUrl/pdfCloudinaryId.
+ * Cloudinary credentials missing → return a data: URL of the REAL rendered PDF bytes
+ * (stored in Mongo) instead of throwing, so the offer flow still delivers a real,
+ * openable PDF. Never fabricates a remote URL that doesn't exist.
  */
 export async function generateOfferPdf(offerId: string): Promise<{ url: string; publicId: string }> {
   const offer = await Offer.findById(offerId);
   if (!offer) throw new Error("Offer not found");
 
   const pdfBuffer = await renderOfferPdf(offerId);
+
+  const cloudinaryReady = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+  if (!cloudinaryReady) {
+    const dataUrl = "data:application/pdf;base64," + pdfBuffer.toString("base64");
+    offer.set("pdfBufferBase64", pdfBuffer.toString("base64"));
+    offer.pdfUrl = dataUrl;
+    offer.pdfCloudinaryId = "local:" + `offer_${String(offer._id)}_v${offer.version}`;
+    await offer.save();
+    return { url: dataUrl, publicId: offer.pdfCloudinaryId };
+  }
 
   const publicId = `offer_letters/offer_${String(offer._id)}_v${offer.version}_${Date.now()}`;
   const result = await new Promise<any>((resolve, reject) => {

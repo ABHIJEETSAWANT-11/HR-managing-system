@@ -107,3 +107,26 @@ gemini in both runs: {"ok":false,"skipped":true,"error":"GEMINI_API_KEY not conf
 BE_TSC=0 FE_TSC=0; rebuild+restart pid 11444, HEALTH=200
 ```
 ### Status: DONE WITH CAVEAT — scoring engine, routes, override, idempotency, denormalization, frontend wiring all verified with real API runs. The Gemini explanation is SKIPPED (no key) exactly like Section 2; scores are unaffected (by design). With a key, rerun section3-verify.mjs to see explanation text populate.
+
+## [2026-09-15 ~01:20] STEP 4 — REAL EMAIL SENDING ON OFFER SEND
+### What I did
+- Created backend/src/services/mail.service.ts: Nodemailer via existing SMTP_HOST/PORT/USER/PASS/EMAIL_FROM env (already declared in config/env.ts), HTML offer email (candidate name, job title, company, CTC, response-by date, big "View Your Offer" portal button + plain link). smtpConfigured() gate; no-creds → {sent:false, skipped:true, reason, logged:{to,subject,portalUrl}} + console log — never a fabricated success.
+- Wired into POST /:id/send: generates PDF (if missing), ensures portalToken, looks up candidate/job/org, calls sendOfferEmail, marks sent. Response now returns {offer, email: <real result object>}.
+- HARD-EDGE FIX (unplanned but required): generateOfferPdf used to THROW "Must supply api_key" when Cloudinary creds are missing (they are) — the whole send route 500'd and email could never be reached. It now renders the REAL PDF via Puppeteer (unchanged) and, without Cloudinary, stores the base64 bytes on the offer + a data: URL in pdfUrl. Real, openable PDF either way; zero fabrication.
+- Fixed one TS trap: dynamic import() resolves ESM-only under NodeNext ("Cannot find module"); replaced with a static import.
+- Also hit and fixed a script bug of my own (users response shape) — script only.
+
+### Real output (full real chain, fresh offer)
+```
+managerId=6aa7140fe1f23b7704a7b6d4
+OFFER CREATE status=201 id=6aa724be531f31f44eddf3c5
+SUBMIT status=200
+APPROVE×3 → 200,200,200 offerStatus="approved"
+SEND status=200
+SEND EMAIL RESULT: {"sent":false,"skipped":true,"reason":"SMTP_USER/SMTP_PASS not configured",
+  "logged":{"to":"mail.mu0e4o2e@test.com","subject":"Your offer from Verification Org 2 — Mail Job mu0e4o2e",
+  "portalUrl":"http://localhost:5173/portal/offers/cf3a7a8ac1b616558570846898ad4127649af7ebf050f9425252fea0787f0f54"}}
+OFFER STATUS: sent portalToken=present(len 64)
+BE_TSC=0, rebuild OK, restart pid 23536, HEALTH=200
+```
+### Status: PARTIALLY DONE — send flow fully wired and verified through the real API; the actual inbox delivery test (4.2) is SKIPPED: SMTP_USER/SMTP_PASS empty (HARD STOP: missing credential). The skip is honest in the API response. With creds in .env, re-running section4-verify.mjs sends for real with zero code changes.

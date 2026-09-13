@@ -3,11 +3,13 @@ import { Offer } from "./offer.model";
 import { OfferApproval } from "./offer-approval.model";
 import { DocumentTemplate } from "../templates/document-template.model";
 import { generateOfferPdf } from "../../services/pdf.service";
+import { sendOfferEmail } from "../../services/mail.service";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
 import { CandidateApplication } from "../applications/application.model";
 import { Candidate } from "../candidates/candidate.model";
 import { Job } from "../jobs/job.model";
+import { Organization } from "../organizations/organization.model";
 import mongoose from "mongoose";
 
 /**
@@ -507,13 +509,29 @@ router.post(
         offer.portalToken = crypto.randomBytes(32).toString("hex");
       }
 
-      // Send email via existing email service
-      // For now, just mark as sent
+      // Section 4: real email via Nodemailer (graceful skip when SMTP is not configured).
+      const candidate = await Candidate.findById(offer.candidateId).select("fullName email");
+      const organization = await Organization.findById(orgId).select("name");
+      const job = await Job.findById(offer.jobId).select("title");
+      const portalUrl = `${process.env.CLIENT_URL || "http://localhost:5173"}/portal/offers/${offer.portalToken}`;
+
+      let mailResult: any = null;
+      if (candidate?.email) {
+        mailResult = await sendOfferEmail({
+          to: candidate.email,
+          candidateName: candidate.fullName,
+          jobTitle: job?.title || "the position",
+          companyName: organization?.name || "Our company",
+          portalUrl,
+          ctc: offer.salaryStructure?.annualCTC ?? null,
+          expiryDate: offer.validUntil ?? null,
+        });
+      }
+
       offer.status = "sent";
       offer.sentAt = new Date();
       await offer.save();
-
-      res.status(200).json({ success: true, data: { offer } });
+      res.status(200).json({ success: true, data: { offer, email: mailResult } });
     } catch (error) {
       next(error);
     }

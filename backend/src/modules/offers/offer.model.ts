@@ -43,6 +43,7 @@ export interface IOffer extends Document {
   specialConditions?: string;
   pdfUrl?: string;
   pdfCloudinaryId?: string;
+  pdfBufferBase64?: string;
   portalToken?: string;
   sentAt?: Date;
   firstViewedAt?: Date;
@@ -154,6 +155,7 @@ const offerSchema = new Schema<IOffer>(
     specialConditions: { type: String },
     pdfUrl: { type: String },
     pdfCloudinaryId: { type: String },
+    pdfBufferBase64: { type: String }, // full PDF bytes when Cloudinary is not configured (data: URL served instead)
     portalToken: { type: String },
     sentAt: { type: Date },
     firstViewedAt: { type: Date },
