@@ -61,3 +61,24 @@ FETCHBACK status=200
 PERSISTED REQUIREMENTS: [{"name":"React","type":"mandatory","category":"skill",...},{"name":"Node.js","type":"mandatory",...},{"name":"TypeScript","type":"mandatory",...},{"name":"GraphQL","type":"preferred",...},{"name":"AWS","type":"preferred",...}]
 ```
 ### Status: DONE
+
+## [2026-09-14 ~00:05] STEP 2 — REAL AI-DRIVEN RESUME PARSING
+### What I did
+- Created backend/src/services/resume-parse.service.ts: exact-prompt extraction-only Gemini call reusing the SAME lazy `@google/genai` pattern as jobs' generate-jd (single client pattern, no second wrapper), Zod-validated output (resumeDataSchema), per-field confidence (high/medium/low/not_detected via substring match vs parsedText), overallConfidenceScore.
+- Model: added parsedConfidence, rawGeminiOutput, parsingError to Resume.
+- Rewired single /upload handler. TWO REAL BUGS FIXED IN PASSING: (a) it extracted text with a latin1 toString hack producing garbage — now uses the real pdf-parse v2/mammoth path; (b) it destructively blanked the candidate's skills/education/etc — now only copies real extraction output, never destroys on failure.
+- Failure semantics per spec: extraction empty → parsingStatus=failed+parsingError; Gemini non-JSON/schema-fail → failed + rawGeminiOutput kept for debugging; no API key → parsingStatus=completed (text layer done) + parsingError records the skip. No path crashes the request.
+- 2.4 candidate copy implemented (skills/education/certs/workHistory/projects/languages/totalExperienceYears/currentDesignation from first work entry) — runs only on validated success.
+
+### Real output
+```
+CANDIDATE status=201 id=yes
+UPLOAD status=201 resumeId=6aa7210df9d9280e64ec899c
+PARSE: status=completed parsedTextLen=616
+TEXT_HEAD: "Rohan Deshpande\nEmail: rohan.deshpande@example.com Phone: +91 98200 11223 Pune, India\nSKILLS\nJavaScript, TypeScript, Rea"
+HAS_KEY_TOKENS: React=true Infosys=true years7=true
+AI: parsingError="AI structuring skipped: GEMINI_API_KEY not configured"
+AI: parsedDataPresent=false confidence=null
+CANDIDATE_AFTER: skills=[] workHistory=0 totalExperienceYears=null
+```
+### Status: PARTIALLY DONE — extraction + plumbing + failure semantics fully built and verified live with a real PDF; the actual Gemini call is SKIPPED because GEMINI_API_KEY is empty (HARD STOP class: missing credential). No mock was used anywhere. With a real key in .env, re-running `node scripts/section2-verify.mjs` completes the remaining verification with zero code changes.

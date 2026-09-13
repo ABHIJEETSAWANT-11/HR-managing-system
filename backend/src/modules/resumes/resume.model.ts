@@ -10,6 +10,9 @@ export interface IResume extends Document {
   parsingStatus: string;
   parsedText?: string;
   parsedData?: any;
+  parsedConfidence?: any; // per-field: {skills: high|medium|low|not_detected, ...}
+  rawGeminiOutput?: string; // debuggable raw AI output when validation fails
+  parsingError?: string;
   parsingConfidence?: number;
   resumeQualityScore?: number;
   parsedAt?: Date;
@@ -54,6 +57,15 @@ const resumeSchema = new Schema<IResume>(
     },
     parsedData: {
       type: Schema.Types.Mixed,
+    },
+    parsedConfidence: {
+      type: Schema.Types.Mixed,
+    },
+    rawGeminiOutput: {
+      type: String,
+    },
+    parsingError: {
+      type: String,
     },
     parsingConfidence: {
       type: Number,

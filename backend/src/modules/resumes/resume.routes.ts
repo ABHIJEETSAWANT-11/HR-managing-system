@@ -6,6 +6,7 @@ import { requireTenant } from "../../middleware/tenantGuard";
 import pLimit from "p-limit";
 import mongoose from "mongoose";
 import multer from "multer";
+import { parseResumeWithGemini, computeFieldConfidence, overallConfidenceScore } from "../../services/resume-parse.service";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -74,26 +75,60 @@ router.post(
       await resume.save();
 
       if (candidateId) {
+        // Use the REAL extractor (pdf-parse v2 / mammoth) — the old latin1 toString
+        // hack produced garbage for anything but plain-text PDFs.
         const fileBuffer = Buffer.from(file.buffer);
-        const text = extractText(fileBuffer, resume.fileType);
+        let text = "";
+        try {
+          text = await extractTextAsync(fileBuffer, resume.fileType);
+        } catch {
+          text = "";
+        }
         resume.parsedText = text;
-        await resume.save();
 
-        Resume.findByIdAndUpdate(resume._id, {
-          parsingStatus: "completed",
-          parsedAt: new Date(),
-        }).catch(() => {});
+        if (!text) {
+          resume.parsingStatus = "failed";
+          resume.parsingError = "Text extraction produced no content";
+          await resume.save();
+        } else {
+          // Section 2: Gemini structuring (graceful no-key skip — never crash)
+          const gemini = await parseResumeWithGemini(text);
+          if (gemini.ok && gemini.data) {
+            resume.parsedData = gemini.data;
+            resume.parsedConfidence = computeFieldConfidence(gemini.data, text);
+            resume.parsingConfidence = overallConfidenceScore(resume.parsedConfidence as any);
+            resume.rawGeminiOutput = gemini.raw;
+            resume.parsingStatus = "completed";
+            resume.parsedAt = new Date();
+          } else if (gemini.skipped) {
+            // No API key: text extraction still completed; AI structuring deferred.
+            resume.parsingStatus = "completed";
+            resume.parsedAt = new Date();
+            resume.parsingError = "AI structuring skipped: " + gemini.error;
+          } else {
+            // Real Gemini/validation failure: parse failed, raw output kept debuggable.
+            resume.parsingStatus = "failed";
+            resume.rawGeminiOutput = gemini.raw;
+            resume.parsingError = gemini.error;
+          }
+          await resume.save();
 
-        Candidate.findByIdAndUpdate(candidateId, {
-          $set: {
-            skills: [],
-            education: [],
-            certifications: [],
-            workHistory: [],
-            projects: [],
-            languages: [],
-          },
-        }).catch(() => {});
+          // Copy parsed fields onto the Candidate (2.4). Extraction-only data;
+          // never destroys previously stored values when this run failed.
+          if (gemini.ok && gemini.data) {
+            const c: Record<string, unknown> = { totalExperienceYears: gemini.data.totalExperienceYears ?? undefined };
+            const $set: Record<string, unknown> = {};
+            if (gemini.data.skills.length) $set.skills = gemini.data.skills;
+            if (gemini.data.education.length) $set.education = gemini.data.education;
+            if (gemini.data.certifications.length) $set.certifications = gemini.data.certifications;
+            if (gemini.data.workHistory.length) $set.workHistory = gemini.data.workHistory;
+            if (gemini.data.projects.length) $set.projects = gemini.data.projects;
+            if (gemini.data.languages.length) $set.languages = gemini.data.languages;
+            if (gemini.data.workHistory.length && !$set.currentDesignation) $set.currentDesignation = gemini.data.workHistory[0].title;
+            await Candidate.findByIdAndUpdate(candidateId, { $set }, { new: false });
+            void c;
+          }
+        }
       }
 
       res.status(201).json({
