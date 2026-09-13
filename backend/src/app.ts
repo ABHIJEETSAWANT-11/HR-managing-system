@@ -35,6 +35,8 @@ import interviewRoutes from "./modules/interviews/interview.routes";
 import offerRoutes from "./modules/offers/offer.routes";
 import templateRoutes from "./modules/templates/template.routes";
 import portalRoutes from "./modules/portal/portal.routes";
+import notificationRoutes from "./modules/notifications/notification.routes";
+import reportRoutes from "./modules/reports/report.routes";
 
 // 5. Global Rate Limiter
 const globalLimiter = rateLimit({
@@ -62,6 +64,8 @@ app.use("/api/v1/applications", applicationRoutes);
 app.use("/api/v1/interviews", interviewRoutes);
 // Public candidate offer portal — NO auth middleware, dedicated rate limiter inside
 app.use("/api/v1/portal/offers", portalRoutes);
+app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/reports", reportRoutes);
 
 // Health routes
 app.get("/health", (req, res) => {

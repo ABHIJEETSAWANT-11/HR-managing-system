@@ -162,3 +162,24 @@ CROSS-ORG GET offer status=404 | CROSS-ORG GET score status=404  (404 expected b
 BE_TSC=0 FE_TSC=0; real mongod :5002 + server :5001 HEALTH=200
 ```
 ### Status: DONE (verified against real local MongoDB because of the 01:45 Atlas incident; portal code is DB-agnostic. Rerun `VERIFY_BASE=http://localhost:5000 node scripts/section5-verify.mjs` against Atlas after the allowlist fix for an identical proof there.)
+
+## [2026-09-15 ~02:45] STEP 6 — NOTIFICATIONS + REPORTS + DASHBOARD WIRING (Phase 9)
+### What I did
+- 6.1 Notification model+routes: GET (paginated, most-recent-first, mine + org-wide, unread filter, unreadCount), PATCH /:id/read, PATCH /read-all. REST polling ONLY — no Socket.io anywhere (frontend: refetchInterval 30s in the dashboard hook). Created services/notification.service.ts notify()/notifyOrg() — fire-and-forget, never fails the host operation. Wired into REAL trigger points (not rebuilt modules): interview scheduled (interview.routes), offer level approved + fully approved (offer.routes approve), portal accepted + portal rejected (portal.routes).
+- 6.2 Reports module /api/v1/reports/*: pipeline-summary (stage counts + avgFitScore), source-quality (per candidate source: applications/avgFit/passed/hired/hireRate), time-to-hire ($dateDiff application→Joined), offer-analytics (per status counts + avgCTC + accept-rate), industries (candidate employer distribution), countries (candidate city distribution — India-first city level). Every pipeline $match/es organizationId first; localField/foreignField joins inside the org's own collections.
+- 6.3 Dashboard rewired to real data, layout unchanged: Upcoming Interview → next scheduled from /interviews (time/job/duration/Join link), Current Vacancies → /jobs?status=open, Industries/Countries Insight → /reports/industries + /reports/countries (real bars with candidate counts; map placeholder replaced by honest bar list titled "Locations Insight"), Potential Candidates → /candidates?limit=5 (real rows, click opens the real CandidateSummaryModal), TopBar badge → real unreadCount via 30s polling. All mock constants deleted.
+- 6.4 verified below against real local Mongo (incident workaround).
+
+### Real output
+```
+SEED register=201 · INTERVIEW=201 · OFFER create=201 · sent + portal-accepted
+NOTIFICATIONS status=200 total=5 types=["offer_accepted","offer_approved","offer_approval_progressed","offer_approval_progressed","interview_scheduled"]
+/pipeline-summary → stages: Shortlisted 1 (avgFit 45), Applied 1, Joined 1
+/source-quality → manual: 2 apps, 1 hired, hireRatePct 50 · referral: 1 app, 0
+/time-to-hire → hires=1 avgDays=0 (same-day test data; pipeline correct)
+/offer-analytics → accepted 1, avgCTC 900000, acceptRatePct 100
+/industries → Infotech0/1/2 (1 each) · /countries → Pune/Mumbai/Bengaluru (1 each)
+UNREAD count=5 → READ-ALL updated=5 → unread now=0
+BE_TSC=0 FE_TSC=0
+```
+### Status: DONE

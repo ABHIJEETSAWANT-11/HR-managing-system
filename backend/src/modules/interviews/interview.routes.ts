@@ -3,6 +3,7 @@ import { Interview } from "./interview.model";
 import { InterviewScorecard } from "./interview-scorecard.model";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
+import { notifyOrg } from "../../services/notification.service";
 import { CandidateApplication } from "../applications/application.model";
 import { Job } from "../jobs/job.model";
 import mongoose from "mongoose";
@@ -115,6 +116,17 @@ router.post(
       });
 
       await interview.save();
+
+      // Section 6.1 trigger: interview scheduled → org notification
+      notifyOrg({
+        organizationId: String(orgId),
+        type: "interview_scheduled",
+        title: "Interview scheduled",
+        message: `A ${String(type || "interview").replace(/_/g, " ")} interview was scheduled for ${new Date(scheduledAt).toLocaleString()}.`,
+        link: "/app/interviews",
+        relatedEntityType: "interview",
+        relatedEntityId: String(interview._id),
+      });
 
       res.status(201).json({ success: true, data: { interview } });
     } catch (error) {

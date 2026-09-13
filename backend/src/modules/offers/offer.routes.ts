@@ -10,6 +10,7 @@ import { CandidateApplication } from "../applications/application.model";
 import { Candidate } from "../candidates/candidate.model";
 import { Job } from "../jobs/job.model";
 import { Organization } from "../organizations/organization.model";
+import { notifyOrg } from "../../services/notification.service";
 import mongoose from "mongoose";
 
 /**
@@ -446,9 +447,27 @@ router.post(
       if (req.body.decision === "approve") {
         if (approval.currentLevel < approval.approvalConfig.length) {
           approval.currentLevel += 1;
+          notifyOrg({
+            organizationId: String(orgId),
+            type: "offer_approval_progressed",
+            title: `Offer approval level ${approval.currentLevel} of ${approval.approvalConfig.length} approved`,
+            message: `Offer for ${offer.candidateId} moved one level up (approved as ${req.user?.role}).`,
+            link: "/app/offers",
+            relatedEntityType: "offer",
+            relatedEntityId: String(offer._id),
+          });
         } else {
           offer.status = "approved";
           approval.overallStatus = "approved";
+          notifyOrg({
+            organizationId: String(orgId),
+            type: "offer_approved",
+            title: "Offer fully approved",
+            message: "The offer cleared all approval levels and is ready to send.",
+            link: "/app/offers",
+            relatedEntityType: "offer",
+            relatedEntityId: String(offer._id),
+          });
         }
       } else if (req.body.decision === "reject") {
         offer.status = "draft";

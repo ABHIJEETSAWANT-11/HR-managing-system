@@ -5,6 +5,7 @@ import { Offer } from "../offers/offer.model";
 import { Candidate } from "../candidates/candidate.model";
 import { Job } from "../jobs/job.model";
 import { Organization } from "../organizations/organization.model";
+import { notifyOrg } from "../../services/notification.service";
 
 /**
  * Section 5 — Phase 8 candidate offer portal.
@@ -123,6 +124,17 @@ router.post(
       offer.status = "accepted";
       await offer.save();
 
+      // Section 6.1 trigger: portal acceptance → org notification
+      notifyOrg({
+        organizationId: String(offer.organizationId),
+        type: "offer_accepted",
+        title: "🎉 Candidate accepted the offer",
+        message: `${fullName} accepted the offer (signed via portal from IP ${offer.acceptanceIp}).`,
+        link: "/app/offers",
+        relatedEntityType: "offer",
+        relatedEntityId: String(offer._id),
+      });
+
       res.status(200).json({
         success: true,
         data: {
@@ -156,6 +168,17 @@ router.post(
       offer.rejectedAt = new Date();
       offer.status = "rejected";
       await offer.save();
+
+      // Section 6.1 trigger: portal rejection → org notification
+      notifyOrg({
+        organizationId: String(offer.organizationId),
+        type: "offer_rejected",
+        title: "Candidate declined the offer",
+        message: reason ? `Candidate declined via portal. Reason: ${reason.slice(0, 200)}` : "Candidate declined the offer via the portal.",
+        link: "/app/offers",
+        relatedEntityType: "offer",
+        relatedEntityId: String(offer._id),
+      });
 
       res.status(200).json({ success: true, data: { status: offer.status, rejectedAt: offer.rejectedAt } });
     } catch (error) {
