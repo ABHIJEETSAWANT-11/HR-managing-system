@@ -130,3 +130,35 @@ OFFER STATUS: sent portalToken=present(len 64)
 BE_TSC=0, rebuild OK, restart pid 23536, HEALTH=200
 ```
 ### Status: PARTIALLY DONE — send flow fully wired and verified through the real API; the actual inbox delivery test (4.2) is SKIPPED: SMTP_USER/SMTP_PASS empty (HARD STOP: missing credential). The skip is honest in the API response. With creds in .env, re-running section4-verify.mjs sends for real with zero code changes.
+
+## [2026-09-15 ~01:45] INCIDENT — Atlas allowlist rotated AGAIN mid-Section-5
+### What happened
+ISP (Jio CGNAT) rotated the public IP 152.58.16.191 → 152.58.32.33 (3/3 curl probes). Atlas edge now rejects TLS (`tlsv1 alert internal error`), logins/register 500 with MongoNetworkError. Backend boot succeeded at 01:40 but pooled connections die as they re-open.
+### Decision (no one awake to ask — documenting per rules)
+Continue all coding work; run runtime verification against a REAL local MongoDB via `mongodb-memory-server` (dev-only dep) on port 5001. NOT a mock: a genuine mongod binary; every tenancy/lifecycle assertion stays meaningful. backend/.env (Atlas URI) untouched — production path intact. All section verify scripts rerun against Atlas unchanged once the allowlist includes the current IP (add 152.58.32.33 or 0.0.0.0/0).
+### Status: DOCUMENTED
+
+## [2026-09-15 ~02:05] STEP 5 — CANDIDATE OFFER PORTAL (Phase 8)
+### What I did
+- Backend backend/src/modules/portal/portal.routes.ts, mounted at /api/v1/portal/offers with NO auth middleware and a dedicated rate limiter (30 req / 10 min, standard headers) registered inside the router (app.use in app.ts with an explanatory comment).
+- GET /:token — public-safe projection ONLY (candidateName, jobTitle, companyName+logo+address, joiningDate, annualCTC summary, workLocation, pdfUrl, expiresAt, status). Sets firstViewedAt once, lastViewedAt always, sent→viewed. Malformed/nonexistent/withdrawn/expired tokens → ONE generic 404 message (no enumeration hints).
+- POST /:token/accept — typed full name (3–120 chars) as acceptanceSignature + client IP + User-Agent + acceptedAt; guards: expired→410, already-decided→409, invalid→404. This is the deliberate MVP typed-name e-signature — no real e-sign integration, per project invariants.
+- POST /:token/reject — optional reason, rejectedAt, status=rejected, same guards.
+- POST /:token/query — clarification appended to offer.clarificationRequests (new model field), status unchanged.
+- Offer model: +rejectionReason, +clarificationRequests[].
+- Frontend /portal/offers/:token (PortalOfferPage) — OUTSIDE RequireAuth in App.tsx: offer card with company branding, 2×2 facts grid, PDF download link, accept flow with typed-name e-sign + explicit "name+timestamp+IP are recorded" notice, decline with optional reason, ask-a-question, and distinct states for invalid link / expired / already accepted / already rejected. All calls hit the real public routes via the shared axios client.
+- Ran against the REAL local mongod (see 01:45 incident entry) after parametrizing the script (VERIFY_BASE/VERIFY_EMAIL/VERIFY_PASS, self-seeding org).
+
+### Real output (VERIFY_BASE=http://127.0.0.1:5001, real Mongo, real HTTP, no auth headers on portal calls)
+```
+SETUP: offer=6aa72874a0967799cffda0c6  sent=true tokenLen=64
+VIEW status=200 candidateName="Portal Cand mu0ep20n" jobTitle="Portal Job mu0ep20n" company="S5 Verify Org" ctc=1500000 status=viewed
+VIEW leak check: has orgId=false has email=false has annexure=false
+ACCEPT status=200 signedAs="Portal Cand mu0ep20n" ip="::ffff:127.0.0.1" at=2026-09-13T22:49:25.913Z
+ACCEPT-AGAIN status=409 msg="This offer was already accepted."
+QUERY status=200 {"received":true,"message":"Your question has been sent to the hiring team."}
+INVALID status=404/404 sameMsg=true msg="This offer link is invalid or no longer available."
+CROSS-ORG GET offer status=404 | CROSS-ORG GET score status=404  (404 expected both)
+BE_TSC=0 FE_TSC=0; real mongod :5002 + server :5001 HEALTH=200
+```
+### Status: DONE (verified against real local MongoDB because of the 01:45 Atlas incident; portal code is DB-agnostic. Rerun `VERIFY_BASE=http://localhost:5000 node scripts/section5-verify.mjs` against Atlas after the allowlist fix for an identical proof there.)

@@ -53,6 +53,8 @@ export interface IOffer extends Document {
   acceptanceSignature?: string;
   acceptanceIp?: string;
   acceptanceUserAgent?: string;
+  rejectionReason?: string;
+  clarificationRequests?: { message: string; askedAt: Date; ip?: string }[];
   previousVersions: {
     version: number;
     snapshot: object;
@@ -165,6 +167,14 @@ const offerSchema = new Schema<IOffer>(
     acceptanceSignature: { type: String },
     acceptanceIp: { type: String },
     acceptanceUserAgent: { type: String },
+    rejectionReason: { type: String },
+    clarificationRequests: [
+      {
+        message: { type: String, trim: true },
+        askedAt: { type: Date },
+        ip: { type: String },
+      },
+    ],
     previousVersions: [
       {
         version: { type: Number },

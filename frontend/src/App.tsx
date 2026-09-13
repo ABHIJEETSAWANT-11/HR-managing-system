@@ -17,6 +17,7 @@ import { InterviewsPage } from './features/interviews/InterviewsPage';
 import { OffersPage } from './features/offers/OffersPage';
 import { CandidateToolsPage } from './features/candidates/CandidateToolsPage';
 import { ComingSoonPage } from './pages/placeholder/ComingSoonPage';
+import { PortalOfferPage } from './pages/portal/PortalOfferPage';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -32,6 +33,8 @@ function App() {
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          {/* Candidate offer portal — public, token-gated, outside RequireAuth (Phase 8) */}
+          <Route path="/portal/offers/:token" element={<PortalOfferPage />} />
 
           {/* Protected App Routes */}
           <Route element={<RequireAuth />}>
