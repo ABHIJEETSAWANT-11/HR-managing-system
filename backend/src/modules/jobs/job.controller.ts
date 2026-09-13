@@ -53,7 +53,24 @@ export const createJob = async (req: Request, res: Response, next: NextFunction)
 
     const slug = makeSlug(req.body.title);
 
-    const job = new Job({ ...req.body, organizationId: orgId, createdBy, publicSlug: slug });
+    // Structured requirements (Section 1): sanitize client input server-side.
+    // Spreading req.body directly would let a client overwrite organizationId/createdBy.
+    // A legacy client may send a free-text `requirements` STRING — never persisted
+    // (strict schema), so drop it rather than cast-error against the new array path.
+    const reqs = Array.isArray(req.body.requirements)
+      ? req.body.requirements
+      : [];
+    const requirements = reqs
+      .filter((r: any) => r && typeof r.name === "string" && r.name.trim())
+      .map((r: any) => ({
+        name: String(r.name).trim().slice(0, 120),
+        type: r.type === "preferred" ? "preferred" : "mandatory",
+        category: ["skill", "experience", "education", "other"].includes(r.category) ? r.category : "skill",
+      }));
+    const jobBody: Record<string, unknown> = { ...req.body, requirements };
+    if (typeof req.body.requirements === "string") jobBody.description = [req.body.description, "\n\nRequirements:\n" + req.body.requirements].join("");
+
+    const job = new Job({ ...jobBody, organizationId: orgId, createdBy, publicSlug: slug });
     await job.save();
 
     res.status(201).json({ success: true, data: { job } });
@@ -86,9 +103,25 @@ export const updateJob = async (req: Request, res: Response, next: NextFunction)
     delete req.body.createdBy;
     delete req.body.publicSlug;
 
+    // Structured requirements (Section 1): sanitize if provided, ignore otherwise.
+    // A legacy client may still send the free-text JD `requirements` STRING — that
+    // field was never persisted (strict schema), so ignore strings instead of casting.
+    const updateBody: Record<string, unknown> = { ...req.body };
+    if (Array.isArray(req.body.requirements)) {
+      updateBody.requirements = req.body.requirements
+        .filter((r: any) => r && typeof r.name === "string" && r.name.trim())
+        .map((r: any) => ({
+          name: String(r.name).trim().slice(0, 120),
+          type: r.type === "preferred" ? "preferred" : "mandatory",
+          category: ["skill", "experience", "education", "other"].includes(r.category) ? r.category : "skill",
+        }));
+    } else if (typeof req.body.requirements === "string") {
+      delete updateBody.requirements;
+    }
+
     const job = await Job.findOneAndUpdate(
       { _id: req.params.id, organizationId: req.org!._id },
-      { $set: req.body },
+      { $set: updateBody },
       { new: true, runValidators: true }
     );
 

@@ -29,8 +29,16 @@ export const JobForm = () => {
     status: "draft",
     description: "",
     responsibilities: "",
-    requirements: "", // Note: PRD separates requirements, we'll store them or map them
+    requirementsText: "", // free-text requirements from the AI JD generator (kept for reference)
   });
+
+  // Section 1: structured, scored requirements (array of {name, type, category})
+  const [requirements, setRequirements] = useState<{ name: string; type: "mandatory" | "preferred"; category: "skill" | "experience" | "education" | "other" }[]>([]);
+
+  const addRequirement = () => setRequirements((r) => [...r, { name: "", type: "mandatory", category: "skill" }]);
+  const removeRequirement = (i: number) => setRequirements((r) => r.filter((_, idx) => idx !== i));
+  const updateRequirement = (i: number, patch: Partial<{ name: string; type: "mandatory" | "preferred"; category: "skill" | "experience" | "education" | "other" }>) =>
+    setRequirements((r) => r.map((item, idx) => (idx === i ? { ...item, ...patch } : item)));
 
   useEffect(() => {
     if (isEditing) {
@@ -46,8 +54,9 @@ export const JobForm = () => {
           status: job.status,
           description: job.description || "",
           responsibilities: job.responsibilities || "",
-          requirements: job.requirements || "",
+          requirementsText: typeof job.requirements === "string" ? job.requirements : "",
         });
+        setRequirements(Array.isArray(job.requirements) ? job.requirements : []);
         setIsLoading(false);
       }).catch(() => {
         setError("Failed to load job details.");
@@ -81,7 +90,7 @@ export const JobForm = () => {
         ...prev,
         description: draft.description || "",
         responsibilities: draft.responsibilities || "",
-        requirements: draft.requirements || "",
+        requirementsText: draft.requirements || "",
       }));
       // Show notice briefly or rely on the UI
       alert(notice);
@@ -99,6 +108,7 @@ export const JobForm = () => {
     try {
       const payload = {
         ...formData,
+        requirements, // structured, scored array (Section 1)
         vacancies: Number(formData.vacancies),
         minExperience: formData.minExperience ? Number(formData.minExperience) : undefined,
       };
@@ -223,9 +233,51 @@ export const JobForm = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="requirements">Requirements & Skills</Label>
-              <Textarea id="requirements" name="requirements" value={formData.requirements} onChange={handleChange} className="min-h-[120px] bg-slate border-transparent focus:bg-white" placeholder="List required skills and qualifications..." />
+              <Label htmlFor="requirementsText">Requirements & Skills (free text)</Label>
+              <Textarea id="requirementsText" name="requirementsText" value={formData.requirementsText} onChange={handleChange} className="min-h-[100px] bg-slate border-transparent focus:bg-white" placeholder="List required skills and qualifications (shown in the JD)..." />
             </div>
+          </div>
+        </DashboardCard>
+
+        <DashboardCard title="Structured Requirements (used for Fit Scoring)">
+          <div className="pt-2 space-y-3">
+            <p className="text-xs text-[#6B7280]">
+              Mandatory requirements disqualify a candidate if missing (but never hide the score). Preferred ones only add to the score.
+            </p>
+            {requirements.map((req, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <Input
+                  className="col-span-5 bg-slate border-transparent focus:bg-white"
+                  placeholder={`Requirement ${i + 1} (e.g. React)`}
+                  value={req.name}
+                  onChange={(e) => updateRequirement(i, { name: e.target.value })}
+                />
+                <select
+                  className="col-span-4 px-3 py-2 bg-slate rounded-lg text-sm border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={req.type}
+                  onChange={(e) => updateRequirement(i, { type: e.target.value as "mandatory" | "preferred" })}
+                >
+                  <option value="mandatory">Mandatory</option>
+                  <option value="preferred">Preferred</option>
+                </select>
+                <select
+                  className="col-span-2 px-3 py-2 bg-slate rounded-lg text-sm border-transparent focus:outline-none focus:ring-2 focus:ring-primary"
+                  value={req.category}
+                  onChange={(e) => updateRequirement(i, { category: e.target.value as "skill" | "experience" | "education" | "other" })}
+                >
+                  <option value="skill">Skill</option>
+                  <option value="experience">Experience</option>
+                  <option value="education">Education</option>
+                  <option value="other">Other</option>
+                </select>
+                <button type="button" onClick={() => removeRequirement(i)} className="col-span-1 text-[#EF4444] hover:text-red-600 text-lg font-bold" aria-label="Remove requirement">
+                  ×
+                </button>
+              </div>
+            ))}
+            <Button type="button" variant="outline" onClick={addRequirement} className="rounded-pill bg-white text-ink hover:bg-slate border-border">
+              + Add requirement
+            </Button>
           </div>
         </DashboardCard>
 

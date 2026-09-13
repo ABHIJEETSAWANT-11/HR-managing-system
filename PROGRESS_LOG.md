@@ -44,3 +44,20 @@ git commit -m "baseline: prior sessions' verified work (modules CRUD, PDF servic
 git status --short afterwards: only untracked non-project artifacts remain
 ```
 ### Status: DONE
+
+## [2026-09-14 ~23:50] STEP 1 — STRUCTURED JOB REQUIREMENTS
+### What I did
+- 1.1: Added `requirements: [{name, type: mandatory|preferred, category: skill|experience|education|other}]` array to Job model with `default: []` (migration-safe; existing jobs unaffected).
+- 1.2: createJob/updateJob now accept the array — **server-side sanitized** (name trimmed/capped 120, type/category whitelisted) so a client cannot inject arbitrary values. Critical catch: the existing JobForm sent a free-text `requirements` STRING (from the AI JD generator) which the strict schema previously dropped silently; left unfixed it would have cast-error'd every job save after this change. Legacy strings are now dropped (create folds them into `description`; update ignores), never crash.
+- 1.3: JobForm.tsx — renamed free-text field to `requirementsText` (still fed by AI generator), added repeatable structured rows (name + mandatory/preferred + category) matching the form's existing DashboardCard/Input/select conventions; edit-mode loads existing array.
+- 1.4: Verified below.
+
+### Real output
+```
+BE_TSC=0 / FE_TSC=0 after changes
+Rebuild BUILD_OK; server restart pid 15836, HEALTH=200
+CREATE status=201 reqCount=5
+FETCHBACK status=200
+PERSISTED REQUIREMENTS: [{"name":"React","type":"mandatory","category":"skill",...},{"name":"Node.js","type":"mandatory",...},{"name":"TypeScript","type":"mandatory",...},{"name":"GraphQL","type":"preferred",...},{"name":"AWS","type":"preferred",...}]
+```
+### Status: DONE

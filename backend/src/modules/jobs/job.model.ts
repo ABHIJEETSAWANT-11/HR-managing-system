@@ -21,6 +21,7 @@ export interface IJob extends Document {
   status: "draft" | "awaiting_approval" | "open" | "paused" | "closed" | "filled" | "archived";
   publicSlug: string;
   screeningQuestions: { question: string; required: boolean }[];
+  requirements: { name: string; type: "mandatory" | "preferred"; category: "skill" | "experience" | "education" | "other" }[];
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -56,6 +57,16 @@ const jobSchema = new Schema<IJob>(
     },
     publicSlug: { type: String, unique: true, sparse: true },
     screeningQuestions: [{ question: String, required: Boolean }],
+    requirements: {
+      type: [
+        {
+          name: { type: String, required: true, trim: true },
+          type: { type: String, enum: ["mandatory", "preferred"], required: true },
+          category: { type: String, enum: ["skill", "experience", "education", "other"], default: "skill" },
+        },
+      ],
+      default: [],
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }
