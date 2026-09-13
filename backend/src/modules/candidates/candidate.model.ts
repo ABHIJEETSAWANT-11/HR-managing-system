@@ -33,6 +33,7 @@ export interface ICandidate extends Document {
     | "agency"
     | "email_import";
   tags: string[];
+  availability?: { status?: "immediate" | "notice_period" | "passive" | "unavailable"; noticePeriodDays?: number };
   isDeleted: boolean;
   deletedAt?: Date;
   createdAt: Date;
@@ -110,6 +111,10 @@ const candidateSchema = new Schema<ICandidate>(
       default: "manual",
     },
     tags: [{ type: String, trim: true }],
+    availability: {
+      status: { type: String, enum: ["immediate", "notice_period", "passive", "unavailable"], default: undefined },
+      noticePeriodDays: { type: Number, min: 0 },
+    },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date },
   },

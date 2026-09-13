@@ -4,6 +4,8 @@ import { Job } from "../jobs/job.model";
 import { Candidate } from "../candidates/candidate.model";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
+import { CandidateScore } from "./candidate-score.model";
+import { generateFitScore } from "../../services/score.service";
 
 // Hardcoded default pipeline stages (no PipelineConfig model exists yet).
 // Must stay in sync with the frontend Kanban board (Part 2).
@@ -181,6 +183,79 @@ router.patch(
       }
 
       res.status(200).json({ success: true, data: { application } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ===== Section 3.3: Candidate Fit Score routes =====
+
+// GET /api/v1/applications/:id/score — full scorecard incl. breakdown + explanation
+router.get(
+  "/:id/score",
+  requireAuth,
+  requireTenant,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = (req as any).org!._id;
+      const score = await CandidateScore.findOne({ applicationId: req.params.id, organizationId: orgId });
+      if (!score) {
+        return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "No score generated yet. POST /:id/score/generate first." } });
+      }
+      res.status(200).json({ success: true, data: { score } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// POST /api/v1/applications/:id/score/generate — deterministic, idempotent (replaces, never duplicates)
+router.post(
+  "/:id/score/generate",
+  requireAuth,
+  requireTenant,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = (req as any).org!._id;
+      const { scoreDoc, geminiExplanation } = await generateFitScore(orgId, req.params.id);
+      res.status(200).json({ success: true, data: { score: scoreDoc, geminiExplanation } });
+    } catch (error: any) {
+      if (error?.status === 404) {
+        return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: error.message } });
+      }
+      next(error);
+    }
+  }
+);
+
+// POST /api/v1/applications/:id/score/override — recruiter override; original stays visible
+router.post(
+  "/:id/score/override",
+  requireAuth,
+  requireTenant,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = (req as any).org!._id;
+      const { overrideScore, reason } = req.body || {};
+      const n = Number(overrideScore);
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "overrideScore must be a number 0-100" } });
+      }
+      if (!reason || !String(reason).trim()) {
+        return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "reason is required for an override" } });
+      }
+      const score = await CandidateScore.findOne({ applicationId: req.params.id, organizationId: orgId });
+      if (!score) {
+        return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "No score to override. Generate one first." } });
+      }
+      score.isOverridden = true;
+      score.overrideReason = String(reason).trim().slice(0, 1000);
+      score.overriddenBy = (req as any).user!._id;
+      score.overallScore = Math.round(n);
+      await score.save();
+      await CandidateApplication.updateOne({ _id: score.applicationId }, { $set: { fitScore: score.overallScore } });
+      res.status(200).json({ success: true, data: { score } });
     } catch (error) {
       next(error);
     }

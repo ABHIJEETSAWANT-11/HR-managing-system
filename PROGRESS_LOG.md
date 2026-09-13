@@ -82,3 +82,28 @@ AI: parsedDataPresent=false confidence=null
 CANDIDATE_AFTER: skills=[] workHistory=0 totalExperienceYears=null
 ```
 ### Status: PARTIALLY DONE — extraction + plumbing + failure semantics fully built and verified live with a real PDF; the actual Gemini call is SKIPPED because GEMINI_API_KEY is empty (HARD STOP class: missing credential). No mock was used anywhere. With a real key in .env, re-running `node scripts/section2-verify.mjs` completes the remaining verification with zero code changes.
+
+## [2026-09-15 ~00:40] STEP 3 — CANDIDATE FIT SCORE SERVICE
+### What I did
+- 3.1: CandidateScore model exactly per spec (applicationId unique+indexed, breakdown map, eligibilityChecks[], explanation, scoringConfigSnapshot, isOverridden/overrideReason/overriddenBy, organizationId indexed for tenancy).
+- 3.2: score.service.ts — fully deterministic. Weights 30/25/15/10/10/5/5. mandatorySkills = matched mandatory skill reqs / total × 100; any mandatory failure → application.eligibilityStatus='failed' while the FULL score is still stored/shown (never hidden/zeroed). Experience taper: -20/yr below min (floor 0), mild -5/yr above max (floor 60). roleIndustrySimilarity = job-title keyword hits in designation+workHistory titles. preferredSkills/education/projects/availability same normalize-0-100 pattern; missing data → score 0 + details say "not available", never fabricated. overallScore = weighted sum, rounded. Idempotent upsert on applicationId (regenerate replaces, never duplicates). AFTER the number exists, Gemini is asked for words-only explanation; Zod-shaped, explicitly forbidden from altering values; on failure/skip the score stands with explanation absent.
+- REAL BUG FIXED ALONG THE WAY: Candidate model had NO availability field at all (score component could never see it). Added availability {status enum, noticePeriodDays} + interface. Verify run confirms it now scores (STRONG availability=100 after fix; was 0/"not recorded" before).
+- 3.3: routes GET /:id/score, POST /:id/score/generate, POST /:id/score/override (override requires reason, validates 0-100, keeps original breakdown; overridder = req.user server-side).
+- 3.4: PipelineBoardPage cards now have "Generate score" action (mutation + query invalidation) and "View score breakdown" expanding the real per-component bars from GET /:id/score + AI summary line when present. Existing fitScore/eligibility badges stay, now fed by real denormalized data.
+
+### Real output (two runs; second after availability fix)
+```
+WEAK (Excel, 0y): overallScore=20 eligibilityChecks=[React:failed,Node.js:failed,Kubernetes:failed]
+  DENORM: fitScore=20 eligibilityStatus=failed   ← failed eligibility AND visible real score ✓
+STRONG (React/Node/TS/K8s, 4y): overallScore=71 eligibilityChecks=[React:passed,Node.js:passed,Kubernetes:passed]
+  DENORM: fitScore=71 eligibilityStatus=passed
+  breakdown: mandatorySkills=100(0.30) relevantExperience=100(0.25) roleIndustrySimilarity=0(0.15)
+             preferredSkills=100(0.10) educationCertifications=0(0.10) projectRelevance=29(0.05) availability=100(0.05)
+             weighted: 30+25+0+10+0+1.45+5 = 71.45 → 71 ✓ (hand-checked)
+WEAK weighted check: 0+15(4y vs 2+ → -20×2 tapered=60? actual 60×0.25=15)+0+0+0+0+5 = 20 ✓
+REGEN → GET: single doc each (idempotent upsert confirmed)
+OVERRIDE: 200 isOverridden=true newScore=91 reason stored; invalid(500)→400; missing-reason→400
+gemini in both runs: {"ok":false,"skipped":true,"error":"GEMINI_API_KEY not configured"} ← documented skip
+BE_TSC=0 FE_TSC=0; rebuild+restart pid 11444, HEALTH=200
+```
+### Status: DONE WITH CAVEAT — scoring engine, routes, override, idempotency, denormalization, frontend wiring all verified with real API runs. The Gemini explanation is SKIPPED (no key) exactly like Section 2; scores are unaffected (by design). With a key, rerun section3-verify.mjs to see explanation text populate.

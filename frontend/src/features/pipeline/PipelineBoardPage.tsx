@@ -14,8 +14,67 @@ import { CandidateSummaryModal, type CandidateSummaryData } from "../../componen
 import { useJobApplications, useUpdateApplicationStage, PIPELINE_STAGES, type PipelineCandidate } from "./pipeline";
 import { Badge } from "../../components/ui/badge";
 import { client } from "../../lib/api/client";
-import { useQuery } from "@tanstack/react-query";
-import { Briefcase } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Briefcase, Sparkles } from "lucide-react";
+
+// Section 3.4 — real Fit Score from GET /applications/:id/score
+export function useApplicationScore(applicationId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["application-score", applicationId],
+    queryFn: async () => (await client.get(`/applications/${applicationId}/score`)).data.data?.score,
+    enabled: !!applicationId && enabled,
+    retry: false,
+  });
+}
+
+function GenerateScoreButton({ applicationId }: { applicationId: string }) {
+  const qc = useQueryClient();
+  const gen = useMutation({
+    mutationFn: async () => (await client.post(`/applications/${applicationId}/score/generate`)).data.data?.score,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["application-score", applicationId] });
+      qc.invalidateQueries({ queryKey: ["pipeline"] });
+    },
+  });
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        gen.mutate();
+      }}
+      disabled={gen.isPending}
+      className="ml-auto text-[10px] font-semibold text-primary hover:underline flex items-center gap-1 shrink-0"
+      title="Generate deterministic Fit Score for this candidate"
+    >
+      <Sparkles className="h-3 w-3" />
+      {gen.isPending ? "Scoring…" : gen.isError ? "Retry score" : "Generate score"}
+    </button>
+  );
+}
+
+function ScoreDetail({ applicationId }: { applicationId: string }) {
+  const { data: score, isLoading } = useApplicationScore(applicationId, true);
+  if (isLoading) return <p className="text-[11px] text-[#6B7280] mt-2">Loading score…</p>;
+  if (!score) return null;
+  return (
+    <div className="mt-2 border-t border-[#E5E7EB] pt-2 space-y-1">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-bold text-ink">Fit Score: {score.overallScore}/100{score.isOverridden ? " (overridden)" : ""}</p>
+      </div>
+      {Object.entries(score.breakdown || {}).map(([k, v]: [string, any]) => (
+        <div key={k} className="flex items-center gap-2">
+          <span className="text-[10px] text-[#6B7280] w-28 truncate" title={v.details}>{k.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+          <div className="flex-1 h-1.5 bg-slate rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full" style={{ width: `${v.score}%` }} />
+          </div>
+          <span className="text-[10px] text-[#374151] w-7 text-right">{v.score}</span>
+        </div>
+      ))}
+      {score.explanation?.summary && <p className="text-[10px] text-[#6B7280] italic mt-1">{score.explanation.summary}</p>}
+    </div>
+  );
+}
 
 const VISIBLE_STAGES = PIPELINE_STAGES.filter((s) =>
   ["Applied", "AI Reviewed", "Recruiter Review", "Shortlisted", "Screening Call", "Interview", "Assessment", "Final Interview", "Offer Approval", "Offer Sent", "Offer Accepted", "Joined"].includes(s)
@@ -33,6 +92,7 @@ function Card({ app, onOpen }: { app: PipelineCandidate; onOpen: (c: CandidateSu
   const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: app._id });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 } : undefined;
   const c = app.candidateId;
+  const [showScore, setShowScore] = useState(false);
 
   return (
     <div
@@ -64,7 +124,24 @@ function Card({ app, onOpen }: { app: PipelineCandidate; onOpen: (c: CandidateSu
         <Badge className={`${eligibilityColors[app.eligibilityStatus] ?? eligibilityColors.not_evaluated} border-0 rounded-pill text-[10px]`}>
           {app.eligibilityStatus.replace("_", " ")}
         </Badge>
+        <GenerateScoreButton applicationId={app._id} />
       </div>
+      {showScore ? (
+        <div onClick={(e) => e.stopPropagation()}>
+          <ScoreDetail applicationId={app._id} />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowScore(true);
+          }}
+          className="text-[10px] text-[#6B7280] hover:text-primary mt-1"
+        >
+          View score breakdown
+        </button>
+      )}
     </div>
   );
 }
