@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Offer } from "./offer.model";
 import { OfferApproval } from "./offer-approval.model";
 import { DocumentTemplate } from "../templates/document-template.model";
+import { generateOfferPdf } from "../../services/pdf.service";
 import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
 import { CandidateApplication } from "../applications/application.model";
@@ -106,7 +107,7 @@ router.post(
         applicationId, jobId, candidateId, templateId,
         joiningDate, reportingManagerId, workLocation,
         probationPeriodDays, noticePeriodDays, validUntil,
-        salaryStructure, specialConditions, createdBy,
+        salaryStructure, specialConditions,
       } = req.body;
 
       // Verify application exists and belongs to org
@@ -191,7 +192,7 @@ router.post(
         specialConditions,
         portalToken,
         status: "draft",
-        createdBy,
+        createdBy: req.user!._id,
       });
 
       await offer.save();
@@ -427,8 +428,15 @@ router.post(
         });
       }
 
+      // Map the decision verb to the per-level status enum on OfferApproval
+      const decisionStatusMap: Record<string, "approved" | "rejected" | "changes_requested"> = {
+        approve: "approved",
+        reject: "rejected",
+        request_changes: "changes_requested",
+      };
+
       // Mark this level's approval
-      currentApprover.status = req.body.decision as any;
+      currentApprover.status = decisionStatusMap[req.body.decision] ?? "pending";
       currentApprover.comments = req.body.comments || "";
       currentApprover.decidedAt = new Date();
       currentApprover.offerVersionAtDecision = offer.version;
@@ -486,10 +494,11 @@ router.post(
         });
       }
 
-      // Check if PDF already exists, if not generate it
+      // Generate the real offer PDF via Puppeteer + Cloudinary (pdf.service) if not already generated
       if (!offer.pdfUrl) {
-        offer.pdfUrl = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME || "demo"}/video/upload/offer_${offer._id}.pdf`;
-        offer.pdfCloudinaryId = `offer_${offer._id}`;
+        const pdf = await generateOfferPdf(String(offer._id));
+        offer.pdfUrl = pdf.url;
+        offer.pdfCloudinaryId = pdf.publicId;
       }
 
       // Generate portal token if not exists
@@ -570,8 +579,20 @@ router.get(
         return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Offer not found" } });
       }
 
-      res.set("Content-Type", "application/pdf");
-      res.send(`PDF placeholder for offer ${offer._id}. In production, this would stream the actual generated PDF.`);
+      // Generate the real PDF if it doesn't exist yet, then redirect to the Cloudinary file
+      if (!offer.pdfUrl) {
+        await generateOfferPdf(String(offer._id));
+      }
+
+      const fresh = await Offer.findById(offer._id);
+      if (!fresh?.pdfUrl) {
+        return res.status(500).json({
+          success: false,
+          error: { code: "PDF_GENERATION_FAILED", message: "Offer PDF could not be generated" },
+        });
+      }
+
+      return res.redirect(fresh.pdfUrl);
     } catch (error) {
       next(error);
     }

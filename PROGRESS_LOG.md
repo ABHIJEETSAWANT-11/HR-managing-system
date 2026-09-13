@@ -1,0 +1,46 @@
+# HireFlow AI — Overnight Progress Log
+
+## NEEDS YOUR INPUT (written last, kept at top)
+- **GEMINI_API_KEY is empty in backend/.env** → Section 2 (real AI resume parsing) and the Gemini-explanation halves of Section 3 ran under documented graceful degradation tonight. Everything else about them is built and verified; dropping a real key in .env and re-running the verify steps will light them up with zero code changes.
+- **SMTP_USER / SMTP_PASS are empty** → Section 4 (real outbound offer email) is code-complete but untestable; it falls back to logging the mail object. Provide credentials (any Gmail app-password works) and re-run Section 4's verify.
+- **CLOUDINARY_API_SECRET is empty** → offer PDF upload still can't complete (pre-existing gap, unchanged tonight); Puppeteer rendering remains proven.
+- **MongoDB Atlas IP allowlist rotated again tonight** (backend was refusing `152.58.16.191`); fixed by adding the IP — expect this to recur whenever the ISP rotates the address. LOCAL_RUN.md documents it.
+
+---
+
+## [2026-09-14 ~23:30] STEP 0 — SETUP / BASELINE
+### What I did
+Created this log; audited env keys by length only (never printing values); booted both servers via real entrypoints; captured git baseline.
+
+### Real output
+```
+git status: 16 modified files (backend routes/models, frontend auth/App/tsconfig, package files)
+Untracked: backend/scripts/, backend/src/modules/templates/template.routes.ts,
+backend/src/services/pdf.service.ts, frontend/src/features/, LOCAL_RUN.md, PROGRESS_LOG.md, .freebuff/
+git log --oneline -6:
+4e14783 commit
+eec572c fix: resolve resume.routes.ts type errors and remove invalid syntax
+4e55e10 feat: ground-truth import resolution across candidates/applications/interviews/offers/resumes modules
+36871c4 baseline: pre-repair snapshot, known broken state
+env audit: MONGODB_URI len=107 · JWT_SECRET len=64 · SMTP_HOST len=15 ·
+GEMINI_API_KEY len=0 · CLOUDINARY_API_SECRET len=0 · SMTP_USER len=0 · SMTP_PASS len=0
+Boot: backend pid 6560 → "MongoDB Connected" + GET /health 200; frontend (Vite) pid 19496 → 200 on :5173
+```
+
+### Status: DONE
+
+---
+
+## [2026-09-14 ~23:35] STEP 0.5 — BASELINE COMMIT (pre-existing uncommitted work)
+### What I did
+Per setup instruction #3, committed the prior sessions' verified-but-uncommitted work as one baseline commit before starting new work, so tonight's sections commit on top of a clean tree. Excluded non-project artifacts (.freebuff/, build logs).
+### Real output
+```
+git add backend/src backend/package.json backend/package-lock.json backend/scripts \
+  frontend/src frontend/tsconfig.json frontend/package.json frontend/package-lock.json \
+  LOCAL_RUN.md PROGRESS_LOG.md
+git commit -m "baseline: prior sessions' verified work (modules CRUD, PDF service, fixes, e2e + sweep scripts)"
+→ committed
+git status --short afterwards: only untracked non-project artifacts remain
+```
+### Status: DONE

@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IResume extends Document {
+  organizationId: mongoose.Types.ObjectId;
   candidateId: mongoose.Types.ObjectId;
   fileUrl: string;
   fileCloudinaryId: string;
@@ -18,6 +19,12 @@ export interface IResume extends Document {
 
 const resumeSchema = new Schema<IResume>(
   {
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
+    },
     candidateId: {
       type: Schema.Types.ObjectId,
       ref: "Candidate",
@@ -25,11 +32,10 @@ const resumeSchema = new Schema<IResume>(
     },
     fileUrl: {
       type: String,
-      required: true,
+      // Optional: resumes live in Mongo (parsedText) when Cloudinary isn't configured
     },
     fileCloudinaryId: {
       type: String,
-      required: true,
     },
     originalFilename: {
       type: String,

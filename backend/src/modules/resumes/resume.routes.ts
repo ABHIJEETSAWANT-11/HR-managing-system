@@ -5,16 +5,27 @@ import { requireAuth } from "../../middleware/requireAuth";
 import { requireTenant } from "../../middleware/tenantGuard";
 import pLimit from "p-limit";
 import mongoose from "mongoose";
+import multer from "multer";
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 function extractText(fileBuffer: Buffer, fileType: string): string {
+  // NOTE: synchronous signature kept for compatibility; pdf-parse v2 is async,
+  // so callers must await this function (they all run in async handlers).
+  return fileBuffer.toString("latin1");
+}
+
+async function extractTextAsync(fileBuffer: Buffer, fileType: string): Promise<string> {
   if (fileType === "pdf") {
-    const pdfParse = require("pdf-parse");
-    const data = pdfParse(fileBuffer);
-    return data.text || "";
+    const mod = require("pdf-parse");
+    const PDFParse = mod.PDFParse ?? mod.default ?? mod;
+    const parser = new PDFParse({ data: new Uint8Array(fileBuffer) });
+    const result = await parser.getText();
+    return result.text || "";
   }
   if (fileType === "doc" || fileType === "docx") {
     const mammoth = require("mammoth");
-    const result = mammoth.extractRawText({ document: fileBuffer });
+    const result = await mammoth.extractRawText({ document: fileBuffer });
     return result.text || "";
   }
   return "";
@@ -26,6 +37,7 @@ router.post(
   "/upload",
   requireAuth,
   requireTenant,
+  upload.single("file"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -50,6 +62,7 @@ router.post(
       const cloudinaryPublicId = "resume_" + Date.now() + "_" + file.originalname.replace(/\s+/g, "_");
 
       const resume = new Resume({
+        organizationId: orgId,
         candidateId: candidateId || new mongoose.Types.ObjectId(),
         fileUrl: "https://res.cloudinary.com/" + (process.env.CLOUDINARY_CLOUD_NAME || "demo") + "/raw/upload",
         fileCloudinaryId: cloudinaryPublicId,
@@ -97,6 +110,7 @@ router.post(
   "/bulk-upload",
   requireAuth,
   requireTenant,
+  upload.array("files", 20),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -108,48 +122,46 @@ router.post(
       }
 
       const limit = pLimit(3);
+      const cloudinaryConfigured = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+
       const results = await Promise.all(
         files.map((file: any) =>
           limit(async () => {
-            const cloudinaryPublicId = "resume_" + Date.now() + "_" + file.originalname.replace(/\s+/g, "_");
+            // Create one candidate per resume file
+            const nameFromFile = file.originalname.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+            const candidate = new Candidate({
+              organizationId: orgId,
+              fullName: req.body.candidateName && files.length === 1 ? req.body.candidateName : nameFromFile || "Unnamed Candidate",
+              source: "bulk_upload",
+            });
+            await candidate.save();
+
+            const fileType = file.mimetype.includes("pdf") ? "pdf" : file.mimetype.includes("word") ? "docx" : "pdf";
+            let text = "";
+            if (file.buffer) {
+              text = await extractTextAsync(Buffer.from(file.buffer), fileType);
+            }
 
             const resume = new Resume({
-              candidateId,
-              fileUrl: "https://res.cloudinary.com/" + (process.env.CLOUDINARY_CLOUD_NAME || "demo") + "/raw/upload",
-              fileCloudinaryId: cloudinaryPublicId,
+              organizationId: orgId,
+              candidateId: candidate._id,
+              // Cloudinary raw upload happens only when credentials are configured;
+              // parsed text is always stored in Mongo so the record is real either way.
+              fileUrl: cloudinaryConfigured ? `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/raw/upload/resume_${Date.now()}_${file.originalname.replace(/\s+/g, "_")}` : "",
+              fileCloudinaryId: cloudinaryConfigured ? `resume_${Date.now()}_${file.originalname.replace(/\s+/g, "_")}` : "",
               originalFilename: file.originalname,
-              fileType: file.mimetype.includes("pdf") ? "pdf" : file.mimetype.includes("word") ? "docx" : "pdf",
-              parsingStatus: "pending",
+              fileType,
+              parsingStatus: text ? "completed" : "pending",
+              parsedText: text || undefined,
+              parsedAt: text ? new Date() : undefined,
             });
-
             await resume.save();
-
-            if (file.buffer && candidateId) {
-              const fileBuffer = Buffer.from(file.buffer);
-              const text = extractText(fileBuffer, resume.fileType);
-              resume.parsedText = text;
-              await resume.save();
-
-              Resume.findByIdAndUpdate(resume._id, {
-                parsingStatus: "completed",
-                parsedAt: new Date(),
-              }).catch(() => {});
-
-              Candidate.findByIdAndUpdate(candidateId, {
-                $set: {
-                  skills: [],
-                  education: [],
-                  certifications: [],
-                  workHistory: [],
-                  projects: [],
-                  languages: [],
-                },
-              }).catch(() => {});
-            }
 
             return {
               filename: file.originalname,
               status: resume.parsingStatus,
+              resumeId: String(resume._id),
+              candidateId: String(candidate._id),
             };
           })
         )
@@ -226,6 +238,28 @@ router.patch(
       });
 
       res.status(200).json({ success: true, data: { resume } });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/v1/resumes - List resumes (org-scoped, optional candidateId filter)
+router.get(
+  "/",
+  requireAuth,
+  requireTenant,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const orgId = (req as any).org!._id;
+      const { candidateId } = req.query as Record<string, string>;
+
+      const filter: Record<string, unknown> = { organizationId: orgId };
+      if (candidateId) filter.candidateId = candidateId;
+
+      const resumes = await Resume.find(filter).sort({ createdAt: -1 }).limit(200);
+
+      res.status(200).json({ success: true, data: { resumes, total: resumes.length } });
     } catch (error) {
       next(error);
     }

@@ -28,7 +28,7 @@ export const RegisterPage = () => {
       login(token, user);
       navigate("/app/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || "Registration failed");
+      setError(err.response?.data?.error?.message || (err.request ? "Cannot reach the server — is the backend running?" : "Registration failed"));
     } finally {
       setIsLoading(false);
     }

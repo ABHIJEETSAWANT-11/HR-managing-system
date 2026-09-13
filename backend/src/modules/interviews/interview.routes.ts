@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { Interview } from "./interview.model";
 import { InterviewScorecard } from "./interview-scorecard.model";
 import { requireAuth } from "../../middleware/requireAuth";
+import { requireTenant } from "../../middleware/tenantGuard";
 import { CandidateApplication } from "../applications/application.model";
 import { Job } from "../jobs/job.model";
 import mongoose from "mongoose";
@@ -22,6 +23,7 @@ const router = Router();
 router.get(
   "/",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -71,6 +73,7 @@ router.get(
 router.post(
   "/",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -87,12 +90,12 @@ router.post(
         return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Application not found" } });
       }
 
-      const job = await Job.findOne({ _id: jobId, organizationId: orgId }).lean();
+      const job = await Job.findOne({ _id: application.jobId, organizationId: orgId }).lean();
       if (!job) {
         return res.status(404).json({ success: false, error: { code: "NOT_FOUND", message: "Job not found" } });
       }
 
-      const candidateMatch = application.candidateId.toString() === (candidateId || "").toString();
+      const candidateMatch = !candidateId || application.candidateId.toString() === candidateId.toString();
       if (!candidateMatch) {
         return res.status(400).json({ success: false, error: { code: "BAD_REQUEST", message: "Candidate ID doesn't match application" } });
       }
@@ -101,7 +104,7 @@ router.post(
         organizationId: orgId,
         applicationId,
         candidateId: application.candidateId,
-        jobId,
+        jobId: application.jobId,
         type,
         interviewerIds: interviewerIds || [],
         scheduledAt: new Date(scheduledAt),
@@ -123,6 +126,7 @@ router.post(
 router.get(
   "/:id",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -149,6 +153,7 @@ router.get(
 router.patch(
   "/:id",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -191,6 +196,7 @@ router.patch(
 router.delete(
   "/:id",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -220,6 +226,7 @@ router.delete(
 router.post(
   "/:id/scorecards",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -272,6 +279,7 @@ router.post(
 router.get(
   "/:id/scorecards",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
@@ -323,6 +331,7 @@ router.get(
 router.post(
   "/:id/summary",
   requireAuth,
+  requireTenant,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const orgId = (req as any).org!._id;
