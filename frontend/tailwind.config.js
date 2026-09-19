@@ -12,6 +12,7 @@ export default {
         },
         
         ink: "#0A0A0A",
+        
         slate: "#F3F4F6",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
