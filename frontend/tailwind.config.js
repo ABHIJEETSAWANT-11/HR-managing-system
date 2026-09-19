@@ -11,8 +11,7 @@ export default {
           tint: "#E7F2D2",
         },
         
-        ink: "#0A0A0A",
-        
+        ink: "#0A0A0A",   
         slate: "#F3F4F6",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
